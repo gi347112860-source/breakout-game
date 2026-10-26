@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Retro Breakout 1980s Arcade</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts for Arcade Style -->
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Press Start 2P', cursive, monospace;
+            background-color: #05050a;
+            color: #fff;
+            touch-action: none; /* Prevent scrolling and gesture interference on Android/Mobile */
+            user-select: none;
+            -webkit-user-select: none;
+            overflow: hidden;
+        }
+
+        /* Neon glow effects */
+        .neon-text-pink {
+            text-shadow: 0 0 5px #ff007f, 0 0 10px #ff007f, 0 0 20px #ff007f;
+        }
+        .neon-text-cyan {
+            text-shadow: 0 0 5px #00f3ff, 0 0 10px #00f3ff, 0 0 20px #00f3ff;
+        }
+        .neon-border {
+            box-shadow: 0 0 10px #00f3ff, inset 0 0 10px #00f3ff;
+        }
+        .arcade-btn {
+            transition: all 0.1s ease;
+            box-shadow: 0 4px 0 #008891, 0 0 15px rgba(0, 243, 255, 0.4);
+        }
+        .arcade-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 0 0 #008891, 0 0 10px rgba(0, 243, 255, 0.6);
+        }
+
+        /* Scanline effect for retro feel */
+        .scanlines {
+            background: linear-gradient(
+                rgba(18, 16, 16, 0) 50%, 
+                rgba(0, 0, 0, 0.25) 50%
+            ), linear-gradient(
+                90deg,
+                rgba(255, 0, 0, 0.03),
+                rgba(0, 255, 0, 0.01),
+                rgba(0, 0, 255, 0.03)
+            );
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col justify-between items-center relative p-2 md:p-4 select-none">
+
+    <!-- CRT Scanline overlay for 80s arcade feel -->
+    <div class="absolute inset-0 scanlines z-30"></div>
+
+    <!-- Header: Score & Lives HUD -->
+    <header class="w-full max-w-lg flex justify-between items-center z-10 py-2 px-4 bg-gray-900/80 rounded-lg border border-cyan-500/30 backdrop-blur-sm">
+        <div class="flex flex-col">
+            <span class="text-[10px] text-cyan-400">SCORE</span>
+            <span id="scoreText" class="text-sm md:text-base text-yellow-400">00000</span>
+        </div>
+        <div class="flex flex-col items-center">
+            <span class="text-[10px] text-pink-400">STAGE</span>
+            <span id="levelText" class="text-sm md:text-base text-pink-400">1</span>
+        </div>
+        <div class="flex flex-col items-end">
+            <span class="text-[10px] text-cyan-400">HIGH</span>
+            <span id="highScoreText" class="text-sm md:text-base text-cyan-300">00000</span>
+        </div>
+    </header>
+
+    <!-- Main Game Container -->
+    <main class="relative w-full max-w-lg flex-1 my-2 flex items-center justify-center">
+        <!-- Canvas for Game Graphics -->
+        <canvas id="gameCanvas" class="w-full h-full rounded-lg border-2 border-cyan-500/60 neon-border bg-black block cursor-none"></canvas>
+
+        <!-- Overlay UI Screens -->
+        <!-- 1. Start Screen -->
+        <div id="startScreen" class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/90 rounded-lg p-6 text-center">
+            <h1 class="text-2xl md:text-3xl text-pink-500 neon-text-pink mb-4 leading-relaxed">RETRO<br>BREAKOUT</h1>
+            <p class="text-xs text-cyan-300 mb-8 leading-6">ARCADE CLASSIC 1980s</p>
+            <div class="mb-8 text-[10px] text-gray-400 space-y-2">
+                <p>⚡ Drag / Touch to Move Paddle</p>
+                <p>💥 Destroy Bricks & Get Highscore</p>
+            </div>
+            <button id="startBtn" class="arcade-btn bg-cyan-500 hover:bg-cyan-400 text-black font-bold py-3 px-6 rounded-md text-sm cursor-pointer">
+                START GAME
+            </button>
+        </div>
+
+        <!-- 2. Pause Screen -->
+        <div id="pauseScreen" class="hidden absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/80 rounded-lg backdrop-blur-sm">
+            <h2 class="text-2xl text-yellow-400 mb-6 neon-text-cyan">PAUSED</h2>
+            <button id="resumeBtn" class="arcade-btn bg-cyan-500 text-black font-bold py-3 px-6 rounded-md text-sm mb-4">
+                RESUME
+            </button>
+        </div>
+
+        <!-- 3. Game Over Screen -->
+        <div id="gameOverScreen" class="hidden absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/90 rounded-lg p-6 text-center">
+            <h2 class="text-2xl md:text-3xl text-red-500 mb-2">GAME OVER</h2>
+            <p id="finalScore" class="text-xs text-yellow-400 mb-6">SCORE: 0</p>
+            <button id="restartBtn" class="arcade-btn bg-pink-500 hover:bg-pink-400 text-black font-bold py-3 px-6 rounded-md text-sm">
+                TRY AGAIN
+            </button>
+        </div>
+
+        <!-- 4. Stage Cleared Banner Overlay -->
+        <div id="levelClearBanner" class="hidden absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/80 rounded-lg pointer-events-none">
+            <h2 class="text-xl md:text-2xl text-green-400 neon-text-cyan animate-pulse">STAGE CLEARED!</h2>
+            <p class="text-xs text-cyan-300 mt-2">PREPARING NEXT WAVE...</p>
+        </div>
+    </main>
+
+    <!-- Bottom Controls & Status Bar -->
+    <footer class="w-full max-w-lg flex justify-between items-center z-10 py-2 px-4 bg-gray-900/80 rounded-lg border border-cyan-500/30">
+        <!-- Lives Counter -->
+        <div id="livesContainer" class="flex gap-1 text-pink-500 text-sm">
+            <span>❤️</span><span>❤️</span><span>❤️</span>
+        </div>
+
+        <!-- Pause Button -->
+        <button id="pauseBtn" class="text-xs bg-gray-800 border border-cyan-500/50 text-cyan-400 px-3 py-1.5 rounded hover:bg-gray-700 active:bg-cyan-900">
+            PAUSE
+        </button>
+
+        <!-- Sound Toggle -->
+        <button id="soundBtn" class="text-xs bg-gray-800 border border-cyan-500/50 text-cyan-400 px-3 py-1.5 rounded hover:bg-gray-700">
+            🔊 SOUND
+        </button>
+    </footer>
+
+    <!-- Game JavaScript Code -->
+    <script>
+        // ==========================================
+        // 1. Audio System (Web Audio API Synthesizer)
+        // ==========================================
+        class RetroAudio {
+            constructor() {
+                this.ctx = null;
+                this.enabled = true;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioContext();
+                }
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            playTone(freq, type, duration, vol = 0.1) {
+                if (!this.enabled || !this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                    gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.00001, this.ctx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + duration);
+                } catch (e) {
+                    console.log('Audio playback error:', e);
+                }
+            }
+
+            playPaddleHit() {
+                this.playTone(440, 'square', 0.08, 0.15); // A4 retro blip
+            }
+
+            playWallHit() {
+                this.playTone(300, 'square', 0.05, 0.1);
+            }
+
+            playBrickHit(scoreValue) {
+                const baseFreq = 500 + (scoreValue * 20);
+                this.playTone(baseFreq, 'triangle', 0.08, 0.2);
+            }
+
+            playLoseLife() {
+                if (!this.enabled || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(220, now);
+                osc.frequency.exponentialRampToValueAtTime(80, now + 0.3);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            }
+
+            playLevelClear() {
+                const notes = [523.25, 659.25, 783.99, 1046.50]; // C E G C
+                notes.forEach((freq, idx) => {
+                    setTimeout(() => {
+                        this.playTone(freq, 'square', 0.15, 0.2);
+                    }, idx * 120);
+                });
+            }
+        }
+
+        const audio = new RetroAudio();
+
+        // ==========================================
+        // 2. Game Core Logic & State Management
+        // ==========================================
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // UI Element References
+        const startScreen = document.getElementById('startScreen');
+        const pauseScreen = document.getElementById('pauseScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const levelClearBanner = document.getElementById('levelClearBanner');
+        const scoreText = document.getElementById('scoreText');
+        const highScoreText = document.getElementById('highScoreText');
+        const levelText = document.getElementById('levelText');
+        const livesContainer = document.getElementById('livesContainer');
+        const finalScore = document.getElementById('finalScore');
+
+        // Buttons
+        const startBtn = document.getElementById('startBtn');
+        const resumeBtn = document.getElementById('resumeBtn');
+        const restartBtn = document.getElementById('restartBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const soundBtn = document.getElementById('soundBtn');
+
+        // Game Configuration & State Variables
+        let gameState = 'START'; // START, PLAYING, PAUSED, GAMEOVER, CLEAR
+        let score = 0;
+        let highScore = localStorage.getItem('breakout_highscore') || 0;
+        let lives = 3;
+        let level = 1;
+        let animationFrameId = null;
+
+        // Dynamic Resolution Handling
+        let canvasWidth = 400;
+        let canvasHeight = 600;
+
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            canvasWidth = container.clientWidth;
+            canvasHeight = container.clientHeight;
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+        }
+
+        window.addEventListener('resize', (e) => {
+            resizeCanvas();
+            if (gameState === 'START') {
+                initGameObjects();
+                draw();
+            }
+        });
+
+        // Paddle Definition
+        const paddle = {
+            width: 80,
+            height: 12,
+            x: 0,
+            y: 0,
+            color: '#00f3ff',
+            speed: 0
+        };
+
+        // Ball Definition
+        const ball = {
+            x: 0,
+            y: 0,
+            radius: 6,
+            dx: 0,
+            dy: 0,
+            speed: 5,
+            color: '#fff'
+        };
+
+        // Bricks Grid Setup
+        let bricks = [];
+        const brickConfig = {
+            rows: 5,
+            cols: 7,
+            padding: 6,
+            offsetTop: 60,
+            offsetLeft: 15,
+            height: 16
+        };
+
+        // Brick Color Palette & Points (80s Neon Retro Scheme)
+        const rowThemes = [
+            { color: '#ff0055', points: 50, hits: 1 }, // Red
+            { color: '#ff7700', points: 40, hits: 1 }, // Orange
+            { color: '#ffee00', points: 30, hits: 1 }, // Yellow
+            { color: '#00ff66', points: 20, hits: 1 }, // Green
+            { color: '#00ccff', points: 10, hits: 1 }  // Cyan
+        ];
+
+        // Particle System for Brick Breaking Explosions
+        let particles = [];
+
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.radius = Math.random() * 3 + 1;
+                this.vx = (Math.random() - 0.5) * 6;
+                this.vy = (Math.random() - 0.5) * 6;
+                this.alpha = 1;
+                this.decay = Math.random() * 0.03 + 0.02;
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.alpha -= this.decay;
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, this.alpha);
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.radius, this.radius);
+                ctx.restore();
+            }
+        }
+
+        // ==========================================
+        // 3. Initialization Logic
+        // ==========================================
+        function initGameObjects() {
+            // Paddle position
+            paddle.width = Math.min(canvasWidth * 0.22, 90);
+            paddle.x = (canvasWidth - paddle.width) / 2;
+            paddle.y = canvasHeight - 35;
+
+            // Reset Ball Position
+            resetBall();
+
+            // Construct Bricks Layout
+            createBricks();
+        }
+
+        function resetBall() {
+            ball.x = canvasWidth / 2;
+            ball.y = paddle.y - 12;
+            const baseSpeed = 4.5 + (level * 0.5);
+            ball.speed = Math.min(baseSpeed, 9); // Cap maximum speed
+            
+            // Random angle going upwards
+            const angle = (Math.random() * Math.PI / 4) - (Math.PI / 8) - (Math.PI / 2);
+            ball.dx = ball.speed * Math.cos(angle);
+            ball.dy = ball.speed * Math.sin(angle);
+        }
+
+        function createBricks() {
+            bricks = [];
+            const availableWidth = canvasWidth - (brickConfig.offsetLeft * 2);
+            const brickWidth = (availableWidth - (brickConfig.padding * (brickConfig.cols - 1))) / brickConfig.cols;
+
+            for (let r = 0; r < brickConfig.rows; r++) {
+                bricks[r] = [];
+                const theme = rowThemes[r % rowThemes.length];
+                for (let c = 0; c < brickConfig.cols; c++) {
+                    const brickX = brickConfig.offsetLeft + c * (brickWidth + brickConfig.padding);
+                    const brickY = brickConfig.offsetTop + r * (brickConfig.height + brickConfig.padding);
+                    bricks[r][c] = {
+                        x: brickX,
+                        y: brickY,
+                        w: brickWidth,
+                        h: brickConfig.height,
+                        status: 1,
+                        color: theme.color,
+                        points: theme.points
+                    };
+                }
+            }
+        }
+
+        // ==========================================
+        // 4. Input Controls (Touch, Drag & Mouse)
+        // ==========================================
+        function handlePointerMove(clientX) {
+            const rect = canvas.getBoundingClientRect();
+            const relativeX = clientX - rect.left;
+            paddle.x = relativeX - paddle.width / 2;
+
+            // Keep paddle within canvas boundaries
+            if (paddle.x < 0) paddle.x = 0;
+            if (paddle.x + paddle.width > canvasWidth) {
+                paddle.x = canvasWidth - paddle.width;
+            }
+        }
+
+        // Touch event listeners
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (e.touches.length > 0) {
+                handlePointerMove(e.touches[0].clientX);
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchstart', (e) => {
+            audio.init();
+            if (e.touches.length > 0) {
+                handlePointerMove(e.touches[0].clientX);
+            }
+        }, { passive: true });
+
+        // Mouse event listeners
+        canvas.addEventListener('mousemove', (e) => {
+            handlePointerMove(e.clientX);
+        });
+
+        // Key Controls for Desktop Fallback
+        document.addEventListener('keydown', (e) => {
+            if (gameState !== 'PLAYING') return;
+            if (e.key === 'ArrowLeft' || e.key === 'a') {
+                paddle.x = Math.max(0, paddle.x - 25);
+            } else if (e.key === 'ArrowRight' || e.key === 'd') {
+                paddle.x = Math.min(canvasWidth - paddle.width, paddle.x + 25);
+            } else if (e.key === 'P' || e.key === 'p') {
+                togglePause();
+            }
+        });
+
+        // ==========================================
+        // 5. Update & Physics Calculation
+        // ==========================================
+        function update() {
+            if (gameState !== 'PLAYING') return;
+
+            // 1. Move Ball
+            ball.x += ball.dx;
+            ball.y += ball.dy;
+
+            // 2. Wall Collisions (Left & Right)
+            if (ball.x - ball.radius < 0) {
+                ball.x = ball.radius;
+                ball.dx = -ball.dx;
+                audio.playWallHit();
+            } else if (ball.x + ball.radius > canvasWidth) {
+                ball.x = canvasWidth - ball.radius;
+                ball.dx = -ball.dx;
+                audio.playWallHit();
+            }
+
+            // Top Wall Collision
+            if (ball.y - ball.radius < 0) {
+                ball.y = ball.radius;
+                ball.dy = -ball.dy;
+                audio.playWallHit();
+            }
+
+            // Bottom Wall Collision (Missed Ball)
+            if (ball.y + ball.radius > canvasHeight) {
+                lives--;
+                updateHUD();
+                audio.playLoseLife();
+
+                if (lives <= 0) {
+                    gameOver();
+                } else {
+                    resetBall();
+                }
+                return;
+            }
+
+            // 3. Paddle Collision
+            if (
+                ball.y + ball.radius >= paddle.y &&
+                ball.y - ball.radius <= paddle.y + paddle.height &&
+                ball.x >= paddle.x &&
+                ball.x <= paddle.x + paddle.width &&
+                ball.dy > 0
+            ) {
+                // Calculate bounce angle depending on hit location on paddle
+                const hitPoint = (ball.x - (paddle.x + paddle.width / 2)) / (paddle.width / 2);
+                const maxAngle = Math.PI / 3; // 60 degrees max angle
+                const bounceAngle = hitPoint * maxAngle;
+
+                const currentSpeed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
+                ball.dx = currentSpeed * Math.sin(bounceAngle);
+                ball.dy = -currentSpeed * Math.cos(bounceAngle);
+
+                audio.playPaddleHit();
+            }
+
+            // 4. Brick Collision Detection
+            let allCleared = true;
+
+            for (let r = 0; r < brickConfig.rows; r++) {
+                for (let c = 0; c < brickConfig.cols; c++) {
+                    const b = bricks[r][c];
+                    if (b.status === 1) {
+                        allCleared = false;
+
+                        // Standard AABB vs Circle collision check
+                        if (
+                            ball.x + ball.radius > b.x &&
+                            ball.x - ball.radius < b.x + b.w &&
+                            ball.y + ball.radius > b.y &&
+                            ball.y - ball.radius < b.y + b.h
+                        ) {
+                            b.status = 0;
+                            score += b.points;
+                            audio.playBrickHit(b.points);
+
+                            // Simple reflection logic based on previous position
+                            ball.dy = -ball.dy;
+
+                            // Spawn explosion particles
+                            createParticles(b.x + b.w / 2, b.y + b.h / 2, b.color);
+                            updateHUD();
+                        }
+                    }
+                }
+            }
+
+            // 5. Check Level Clear Condition
+            if (allCleared) {
+                levelCleared();
+            }
+
+            // 6. Particle Updates
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].update();
+                if (particles[i].alpha <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+        }
+
+        function createParticles(x, y, color) {
+            for (let i = 0; i < 12; i++) {
+                particles.push(new Particle(x, y, color));
+            }
+        }
+
+        // ==========================================
+        // 6. Rendering Logic (Canvas Drawing)
+        // ==========================================
+        function draw() {
+            // Clear Canvas with slight dark tint for trail effect
+            ctx.fillStyle = '#05050a';
+            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+            // Draw Subtle Retro Grid
+            drawGrid();
+
+            // Draw Bricks
+            drawBricks();
+
+            // Draw Paddle
+            drawPaddle();
+
+            // Draw Ball
+            drawBall();
+
+            // Draw Particles
+            particles.forEach(p => p.draw(ctx));
+        }
+
+        function drawGrid() {
+            ctx.strokeStyle = 'rgba(0, 243, 255, 0.04)';
+            ctx.lineWidth = 1;
+            const gridSize = 25;
+            for (let x = 0; x < canvasWidth; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvasHeight);
+                ctx.stroke();
+            }
+            for (let y = 0; y < canvasHeight; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvasWidth, y);
+                ctx.stroke();
+            }
+        }
+
+        function drawPaddle() {
+            ctx.save();
+            ctx.fillStyle = paddle.color;
+            ctx.shadowColor = paddle.color;
+            ctx.shadowBlur = 10;
+
+            // Rounded paddle shape
+            const radius = 6;
+            ctx.beginPath();
+            ctx.roundRect(paddle.x, paddle.y, paddle.width, paddle.height, radius);
+            ctx.fill();
+
+            // Highlight bar on top of paddle
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(paddle.x + 4, paddle.y + 2, paddle.width - 8, 2);
+            ctx.restore();
+        }
+
+        function drawBall() {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fillStyle = ball.color;
+            ctx.shadowColor = '#00f3ff';
+            ctx.shadowBlur = 12;
+            ctx.fill();
+            ctx.closePath();
+            ctx.restore();
+        }
+
+        function drawBricks() {
+            for (let r = 0; r < brickConfig.rows; r++) {
+                for (let c = 0; c < brickConfig.cols; c++) {
+                    const b = bricks[r][c];
+                    if (b.status === 1) {
+                        ctx.save();
+                        ctx.fillStyle = b.color;
+                        ctx.shadowColor = b.color;
+                        ctx.shadowBlur = 4;
+
+                        // Draw brick block
+                        ctx.fillRect(b.x, b.y, b.w, b.h);
+
+                        // Inner Bevel Effect for classic arcade look
+                        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                        ctx.fillRect(b.x, b.y, b.w, 2); // top edge
+                        ctx.fillRect(b.x, b.y, 2, b.h); // left edge
+
+                        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+                        ctx.fillRect(b.x, b.y + b.h - 2, b.w, 2); // bottom edge
+                        ctx.fillRect(b.x + b.w - 2, b.y, 2, b.h); // right edge
+
+                        ctx.restore();
+                    }
+                }
+            }
+        }
+
+        // ==========================================
+        // 7. Game Loop & UI Helper Methods
+        // ==========================================
+        function gameLoop() {
+            update();
+            draw();
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function updateHUD() {
+            scoreText.textContent = String(score).padStart(5, '0');
+            highScoreText.textContent = String(highScore).padStart(5, '0');
+            levelText.textContent = level;
+
+            // Render Heart Icons
+            livesContainer.innerHTML = '';
+            for (let i = 0; i < lives; i++) {
+                const heart = document.createElement('span');
+                heart.textContent = '❤️';
+                livesContainer.appendChild(heart);
+            }
+        }
+
+        function startGame() {
+            audio.init();
+            score = 0;
+            lives = 3;
+            level = 1;
+            gameState = 'PLAYING';
+
+            startScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            pauseScreen.classList.add('hidden');
+
+            resizeCanvas();
+            initGameObjects();
+            updateHUD();
+
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            gameLoop();
+        }
+
+        function togglePause() {
+            if (gameState === 'PLAYING') {
+                gameState = 'PAUSED';
+                pauseScreen.classList.remove('hidden');
+            } else if (gameState === 'PAUSED') {
+                gameState = 'PLAYING';
+                pauseScreen.classList.add('hidden');
+            }
+        }
+
+        function gameOver() {
+            gameState = 'GAMEOVER';
+            audio.playLoseLife();
+
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('breakout_highscore', highScore);
+            }
+
+            finalScore.textContent = `FINAL SCORE: ${String(score).padStart(5, '0')}`;
+            updateHUD();
+            gameOverScreen.classList.remove('hidden');
+        }
+
+        function levelCleared() {
+            gameState = 'CLEAR';
+            audio.playLevelClear();
+            levelClearBanner.classList.remove('hidden');
+
+            setTimeout(() => {
+                level++;
+                levelClearBanner.classList.add('hidden');
+                initGameObjects();
+                gameState = 'PLAYING';
+            }, 2000);
+        }
+
+        // ==========================================
+        // 8. Event Listener Bindings
+        // ==========================================
+        startBtn.addEventListener('click', startGame);
+        resumeBtn.addEventListener('click', togglePause);
+        pauseBtn.addEventListener('click', togglePause);
+        restartBtn.addEventListener('click', startGame);
+
+        soundBtn.addEventListener('click', () => {
+            audio.enabled = !audio.enabled;
+            soundBtn.textContent = audio.enabled ? '🔊 SOUND' : '🔇 MUTED';
+            soundBtn.classList.toggle('text-gray-500', !audio.enabled);
+        });
+
+        // Initialize HUD and Layout on Page Load
+        window.onload = () => {
+            resizeCanvas();
+            highScoreText.textContent = String(highScore).padStart(5, '0');
+            initGameObjects();
+            draw();
+        };
+    </script>
+</body>
+</html>
